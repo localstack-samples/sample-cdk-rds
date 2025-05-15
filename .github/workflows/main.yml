@@ -57,7 +57,7 @@ jobs:
 
       - name: Integration Tests
         run: |
-          npm test
+          make test
 
       - name: Show Logs
         if: always()

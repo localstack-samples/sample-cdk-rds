@@ -3,12 +3,12 @@ export AWS_SECRET_ACCESS_KEY ?= test
 export AWS_DEFAULT_REGION=us-east-1
 SHELL := /bin/bash
 
-## Show this help
-usage:
-		@fgrep -h "##" $(MAKEFILE_LIST) | fgrep -v fgrep | sed -e 's/\\$$//' | sed -e 's/##//'
+usage:			## Show this help in table format
+	@echo "| Target                 | Description                                                       |"
+	@echo "|------------------------|-------------------------------------------------------------------|"
+	@fgrep -h "##" $(MAKEFILE_LIST) | fgrep -v fgrep | sed -e 's/:.*##\s*/##/g' | awk -F'##' '{ printf "| %-22s | %-65s |\n", $$1, $$2 }'
 
-## Check if all required prerequisites are installed
-check:
+check:			## Check if all required prerequisites are installed
 	@command -v docker > /dev/null 2>&1 || { echo "Docker is not installed. Please install Docker and try again."; exit 1; }
 	@command -v node > /dev/null 2>&1 || { echo "Node.js is not installed. Please install Node.js and try again."; exit 1; }
 	@command -v aws > /dev/null 2>&1 || { echo "AWS CLI is not installed. Please install AWS CLI and try again."; exit 1; }
@@ -19,8 +19,7 @@ check:
 	@command -v awslocal > /dev/null 2>&1 || { echo "awslocal is not installed. Please install awslocal and try again."; exit 1; }
 	@echo "All required prerequisites are available."
 
-## Install dependencies
-install:
+install:		## Install all required dependencies
 		@if [ ! -d "node_modules" ]; then \
 			echo "node_modules not found. Running npm install..."; \
 			npm install; \
@@ -31,39 +30,51 @@ install:
 		fi
 		@echo "All required dependencies are available."
 
-## Deploy the infrastructure
-deploy:
+deploy:			## Deploy the CDK stack
 		@echo "Bootstrapping CDK..."
 		cdklocal bootstrap
 		@echo "Deploying CDK..."
 		cdklocal deploy --require-approval never
 		@echo "CDK deployed successfully."
 
-## Run the tests
-test:
+test:			## Run the tests
 		@echo "Running tests..."
 		npm test
 		@echo "Tests completed successfully."
 
-## Start LocalStack in detached mode
-start:
+run:			## Execute a SQL query through the Lambda function
+		@echo "Executing SQL query through Lambda function..."
+		@aws_version=$$(aws --version | grep -o "aws-cli/[0-9]*" | cut -d'/' -f2); \
+		if [ "$$aws_version" = "2" ]; then \
+			echo "Using AWS CLI version 2 command format..."; \
+			awslocal lambda invoke \
+				--cli-binary-format raw-in-base64-out \
+				--function-name my-lambda-rds-query-helper \
+				--payload '{"sqlQuery": "select Author from books", "secretName":"/rdsinitexample/rds/creds/mysql-01"}' output; \
+		else \
+			echo "Using AWS CLI version 1 command format..."; \
+			awslocal lambda invoke \
+				--function-name my-lambda-rds-query-helper \
+				--payload '{"sqlQuery": "select Author from books", "secretName":"/rdsinitexample/rds/creds/mysql-01"}' output; \
+		fi
+		@echo "Query execution completed. Results:"
+		@cat output
+
+start:			## Start LocalStack in detached mode
 		@echo "Starting LocalStack..."
 		@LOCALSTACK_AUTH_TOKEN=$(LOCALSTACK_AUTH_TOKEN) localstack start -d
 		@echo "LocalStack started successfully."
 
-## Stop the Running LocalStack container
-stop:
+stop:			## Stop LocalStack
 		@echo "Stopping LocalStack..."
 		@localstack stop
 		@echo "LocalStack stopped successfully."
 
-## Make sure the LocalStack container is up
-ready:
+ready:			## Wait for LocalStack to be ready
 		@echo Waiting on the LocalStack container...
 		@localstack wait -t 30 && echo LocalStack is ready to use! || (echo Gave up waiting on LocalStack, exiting. && exit 1)
 
-## Save the logs in a separate file
-logs:
+logs:			## Get LocalStack logs
 		@localstack logs > logs.txt
 
 .PHONY: usage check start ready install deploy test logs stop
